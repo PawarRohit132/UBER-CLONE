@@ -2,7 +2,7 @@ import mongoose from "mongoose"
 import jwt from "jsonwebtoken"
 import bcrypt from "bcrypt"
 
-const captianSchema = new mongoose.Schema({
+const captainSchema = new mongoose.Schema({
     fullname : {
         firstname : {
             type : String,
@@ -57,7 +57,7 @@ const captianSchema = new mongoose.Schema({
         }
     },
     location : {
-        ltd : {
+        lat : {
             type : Number
         },
         lng : {
@@ -65,6 +65,8 @@ const captianSchema = new mongoose.Schema({
         }
     }
 }, {timestamps : true});
+
+captainSchema.index({ location: "2dsphere" });
 
 captianSchema.methods.generateAuthToken = function(){
     const token = jwt.sign(
@@ -75,7 +77,7 @@ captianSchema.methods.generateAuthToken = function(){
     return token
 };
 
-captianSchema.pre("save", async function(next){
+captainSchema.pre("save", async function(next){
     try {
         if(this.isModified("password")){
             this.password = await bcrypt.hash(this.password, 10)
@@ -90,7 +92,7 @@ captianSchema.pre("save", async function(next){
     }
 });
 
-captianSchema.methods.comparePassword = async function(password){
+captainSchema.methods.comparePassword = async function(password){
     try {
         return await bcrypt.compare(password, this.password);
     } catch (error) {
@@ -99,4 +101,4 @@ captianSchema.methods.comparePassword = async function(password){
     }
 };
 
-export const Caption = mongoose.model("Caption", captianSchema);
+export const Caption = mongoose.model("Caption", captainSchema);
