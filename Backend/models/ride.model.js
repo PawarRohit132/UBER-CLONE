@@ -10,7 +10,6 @@ const rideSchema = new mongoose.Schema({
     caption : {
         type : mongoose.Schema.Types.ObjectId,
         ref : 'caption',
-        required : true
     },
     pickup: {
         type: String,

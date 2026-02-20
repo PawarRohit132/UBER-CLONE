@@ -6,58 +6,107 @@ import {
   getAddressCoordinate,
   getCaptainsInTheRadius,
 } from "../services/maps.service.js";
+import rideService from "../services/ride.service.js";
+import mapService from "../services/maps.service.js";
 import { sendMessageToSocketId } from "../socket.js";
+import { connect } from "mongoose";
 
 const createRide = asyncHandler(async (req, res) => {
   const { userId, pickup, destination, vehicleType } = req.body;
 
-  if (!userId) {
-    throw new ApiError(400, "userId not found login or creat account first");
-  }
   if (
-    [pickup, destination, vehicleType].some((field) => field?.trim() === "")
+    [userId, pickup, destination, vehicleType].some(
+      (eachVal) => eachVal.trim() === "",
+    )
   ) {
-    throw new ApiError(402, "All fields are requeired");
+    throw new ApiError(402, "All fields are required");
   }
 
   try {
-    const ride = await Ride.create({
-      user: req.user._id,
+    const ride = await rideService.createRide({
+      userId,
       pickup,
       destination,
       vehicleType,
     });
     if (!ride) {
-      throw new ApiError(500, "Ride does not created Internal server error");
+      throw new ApiError(500, "Ride not created");
     }
+    res
+      .status(201)
+      .json(new ApiResponse(201, ride, "Ride created successfully"));
 
-    const pickupCoordinates = await getAddressCoordinate(pickup);
-    if (!pickupCoordinates) {
-      throw new ApiError(402, "Pickup address not found");
-    }
+    const pickupCoordinates = await mapService.getAddressCoordinate(pickup);
 
-    const captainInRedius = await getCaptainsInTheRadius(
+    captainsInRedius = await mapService.getCaptainsInTheRadius(
       pickupCoordinates.lat,
       pickupCoordinates.lng,
-      2,
     );
 
-    if (!captainInRedius) {
-      throw new ApiError(404, "There are no captain found on this location");
+    if (!captainsInRedius) {
+      throw new ApiError(404, "There is no captain found in your location");
     }
 
     ride.otp = "";
 
-    const rideWithUser = await Ride.findOne({ _id: ride._id }).populate("user");
+    const rideWithUser = await Ride.findById(ride._id).populate("user");
 
-    captainInRedius.forEach((captain) => {
+    captainsInRedius.map((captain) => {
       sendMessageToSocketId(captain.socketId, {
         event: "new-ride",
         data: rideWithUser,
       });
     });
   } catch (error) {
-    console.log(err);
-    return res.status(500).json({ message: err.message });
+    console.log(error);
+    return res.status(500).json({ message: error.message });
   }
 });
+
+const getFare = asyncHandler(async (req, res) => {
+  const { pickup, destination } = req.query;
+
+  if (!pickup || !destination) {
+    throw new ApiError(404, "Pickup and destination not found");
+  }
+
+  try {
+    const fare = await rideService.getFare(pickup, destination);
+
+    if (!fare) {
+      throw new ApiError(500, "Fare does not found");
+    }
+
+    return res
+      .status(201)
+      .json(new ApiError(201, fare, "Fare fetched Successfully"));
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+const confirmRide = asyncHandler(async (req, res) => {
+  const { rideId } = req.body;
+
+  if (!rideId) {
+    throw new ApiError(402, "Rideid is required");
+  }
+
+  const ride = await rideService.confirmRide({ rideId, captain: req.captain });
+
+  if (!ride) {
+    throw new ApiError(500, "Ride is not confirm");
+  }
+
+  sendMessageToSocketId(ride.user.socketId, {
+    event: "ride-confirmed",
+    data: ride,
+  });
+
+  return res
+    .status(201)
+    .json(new ApiResponse(201, ride, "Ride confirm successfully"));
+});
+
+
